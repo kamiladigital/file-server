@@ -1,0 +1,82 @@
+# File Server Backend
+
+This backend provides AWS S3 multipart upload support with pre-signed URLs, using Go and the AWS SDK.
+
+## Features
+- Initiate multipart upload
+- Generate pre-signed URLs for each part
+- Complete multipart upload (merge parts)
+- Loads AWS credentials from `.env` file
+
+## Folder Structure
+- `cmd/server.go`: Main entrypoint
+- `internal/config`: Loads environment variables
+- `internal/aws`: AWS S3 helpers
+- `internal/api`: HTTP API endpoints
+
+## Setup
+1. Copy `env.sample` to `.env` and fill in your AWS credentials and bucket info.
+2. Run `go mod tidy` to install dependencies.
+3. Start the server:
+   ```bash
+   go run cmd/server.go
+   ```
+
+## API Endpoints
+- `GET /health`: Health check
+- `POST /initiate-multipart`: Start upload, returns uploadId and key
+- `GET /presign-part`: Get pre-signed URL for a part
+- `POST /complete-multipart`: Complete upload, merges parts
+
+Curl examples
+
+- Initiate multipart upload:
+
+```bash
+curl -s -X POST http://localhost:8080/initiate-multipart \
+   -H "Content-Type: application/json" \
+   -d '{"key":"fileserver/hello.txt"}'
+```
+
+- Request a presigned URL for part 1:
+
+```bash
+curl -s -X POST http://localhost:8080/presign-part \
+   -H "Content-Type: application/json" \
+   -d '{"key":"fileserver/hello.txt","uploadId":"<UPLOAD_ID>","partNumber":1}'
+```
+
+- Upload part using the presigned URL (replace `<URL>`):
+
+```bash
+echo -n "Hello World" | curl -s -X PUT --data-binary @- -H "Content-Type: text/plain" "<URL>"
+```
+
+- Complete the multipart upload (replace `<ETAG>` and `<UPLOAD_ID>`):
+
+```bash
+curl -s -X POST http://localhost:8080/complete-multipart \
+   -H "Content-Type: application/json" \
+   -d '{"key":"fileserver/hello.txt","uploadId":"<UPLOAD_ID>","parts":[{"etag":"<ETAG>","partNumber":1}]}'
+```
+
+Smoke test (Go)
+
+- A lightweight Go smoke test is available at `cmd/smoke.go`. It:
+   - Loads `.env` (see `env.sample`)
+   - Calls STS GetCallerIdentity and prints the caller ARN/account
+   - Initiates a multipart upload under the `fileserver/` prefix
+   - Uploads a small "Hello World" payload as part 1 using a presigned URL
+   - Completes the multipart upload
+
+Run it with:
+
+```bash
+go run cmd/smoke.go
+```
+
+## Environment Variables
+See `env.sample` for required variables.
+
+## License
+MIT
