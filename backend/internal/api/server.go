@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"file-server/internal/aws"
 	"file-server/internal/config"
+	"file-server/internal/middleware"
 	"fmt"
 	"net/http"
 
@@ -17,17 +18,31 @@ import (
 
 func StartServer(cfg *config.Config) {
 	s3Client := aws.NewS3(&cfg.AWS)
+	const maxUploadBytes = 10 * 1024 * 1024 * 1024 // 10GB
+
+	// CORS is handled by internal/middleware.ApplyCORS
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if middleware.ApplyCORS(w, r) {
+			return
+		}
 		fmt.Fprintln(w, "OK")
 	})
 
 	http.HandleFunc("/initiate-multipart", func(w http.ResponseWriter, r *http.Request) {
+		if middleware.ApplyCORS(w, r) {
+			return
+		}
 		var req struct {
-			Key string `json:"key"` // original filename or path
+			Key  string `json:"key"`  // original filename or path
+			Size int64  `json:"size"` // file size in bytes
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
 			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		if req.Size > maxUploadBytes {
+			http.Error(w, "File exceeds maximum allowed size (10GB)", http.StatusBadRequest)
 			return
 		}
 		// generate uuidv7 per file and place under fileserver/<uuidv7>/<basename>
@@ -40,10 +55,16 @@ func StartServer(cfg *config.Config) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(info)
+		// also return a publicly addressable URL for convenience
+		fileURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.AWS.Bucket, cfg.AWS.Region, targetKey)
+		resp := map[string]interface{}{"uploadId": info.UploadID, "key": info.Key, "url": fileURL}
+		json.NewEncoder(w).Encode(resp)
 	})
 
 	http.HandleFunc("/presign-part", func(w http.ResponseWriter, r *http.Request) {
+		if middleware.ApplyCORS(w, r) {
+			return
+		}
 		var req struct {
 			Key        string `json:"key"`
 			UploadID   string `json:"uploadId"`
@@ -62,6 +83,9 @@ func StartServer(cfg *config.Config) {
 	})
 
 	http.HandleFunc("/complete-multipart", func(w http.ResponseWriter, r *http.Request) {
+		if middleware.ApplyCORS(w, r) {
+			return
+		}
 		var req struct {
 			Key      string `json:"key"`
 			UploadID string `json:"uploadId"`

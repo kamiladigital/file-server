@@ -1,0 +1,6 @@
+body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; }
+.app { max-width: 800px; margin: 48px auto; padding: 24px; }
+.progress { background: #eee; width: 100%; height: 18px; border-radius: 4px; overflow: hidden; }
+.progress-bar { height: 100%; background: #0b84ff; width: 0%; transition: width 200ms linear; }
+.controls { margin-top: 12px; display:flex; gap:8px; }
+.meta { margin-top: 12px; color: #444; }
