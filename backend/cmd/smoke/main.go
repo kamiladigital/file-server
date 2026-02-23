@@ -11,6 +11,8 @@ import (
 	awsint "file-server/internal/aws"
 	cfgpkg "file-server/internal/config"
 
+	uuidv7 "github.com/samborkent/uuidv7"
+
 	v2aws "github.com/aws/aws-sdk-go-v2/aws"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -20,7 +22,10 @@ func main() {
 	s3Client := awsint.NewS3(&cfg.AWS)
 
 	// Initiate multipart under fileserver/ prefix
-	key := fmt.Sprintf("fileserver/hello-%d.txt", time.Now().Unix())
+	// create per-file uuidv7 folder
+	u := uuidv7.New()
+	uidStr := u.String()
+	key := fmt.Sprintf("fileserver/%s/hello-%d.txt", uidStr, time.Now().Unix())
 	info, err := awsint.InitiateMultipartUpload(s3Client, cfg.AWS.Bucket, key)
 	if err != nil {
 		log.Fatalf("initiate failed: %v", err)

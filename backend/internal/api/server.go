@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"net/http"
 
+	uuidv7 "github.com/samborkent/uuidv7"
+
+	"path/filepath"
+
 	v2aws "github.com/aws/aws-sdk-go-v2/aws"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -20,13 +24,18 @@ func StartServer(cfg *config.Config) {
 
 	http.HandleFunc("/initiate-multipart", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Key string `json:"key"`
+			Key string `json:"key"` // original filename or path
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
 			http.Error(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		info, err := aws.InitiateMultipartUpload(s3Client, cfg.AWS.Bucket, req.Key)
+		// generate uuidv7 per file and place under fileserver/<uuidv7>/<basename>
+		u := uuidv7.New()
+		uidStr := u.String()
+		filename := filepath.Base(req.Key)
+		targetKey := filepath.Join("fileserver", uidStr, filename)
+		info, err := aws.InitiateMultipartUpload(s3Client, cfg.AWS.Bucket, targetKey)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

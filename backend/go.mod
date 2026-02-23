@@ -1,6 +1,6 @@
 module file-server
 
-go 1.23
+go 1.24
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.1
@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6
 	github.com/joho/godotenv v1.5.1
+	github.com/samborkent/uuidv7 v0.0.0-20231110121620-f2e19d87e48b
 )
 
 require (
