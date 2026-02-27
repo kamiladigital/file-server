@@ -19,6 +19,7 @@ func InitiateMultipartUpload(s3Client *s3.Client, bucket, key string) (*Multipar
 	input := &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
+		ACL:    s3types.ObjectCannedACLPublicRead,
 	}
 	result, err := s3Client.CreateMultipartUpload(context.TODO(), input)
 	if err != nil {
@@ -49,6 +50,19 @@ func GetPresignedURLForPart(s3Client *s3.Client, bucket, key, uploadID string, p
 	return resp.URL, nil
 }
 
+// GetPresignedDownloadURL generates a presigned URL for downloading an object.
+func GetPresignedDownloadURL(s3Client *s3.Client, bucket, key string, expires time.Duration) (string, error) {
+	presigner := s3.NewPresignClient(s3Client)
+	resp, err := presigner.PresignGetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(expires))
+	if err != nil {
+		return "", err
+	}
+	return resp.URL, nil
+}
+
 // CompleteMultipartUpload completes the multipart upload with the given parts.
 func CompleteMultipartUpload(s3Client *s3.Client, bucket, key, uploadID string, completedParts []s3types.CompletedPart) error {
 	input := &s3.CompleteMultipartUploadInput{
@@ -60,5 +74,16 @@ func CompleteMultipartUpload(s3Client *s3.Client, bucket, key, uploadID string, 
 		},
 	}
 	_, err := s3Client.CompleteMultipartUpload(context.TODO(), input)
+	if err != nil {
+		return err
+	}
+
+	// Ensure the object is publicly readable after upload
+	_, err = s3Client.PutObjectAcl(context.TODO(), &s3.PutObjectAclInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		ACL:    s3types.ObjectCannedACLPublicRead,
+	})
+
 	return err
 }

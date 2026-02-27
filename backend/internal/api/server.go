@@ -7,6 +7,7 @@ import (
 	"file-server/internal/middleware"
 	"fmt"
 	"net/http"
+	"time"
 
 	uuidv7 "github.com/samborkent/uuidv7"
 
@@ -110,8 +111,20 @@ func StartServer(cfg *config.Config) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"completed"}`))
+
+		// Generate a presigned URL for download (valid for 7 days) as a fallback
+		downloadURL, err := aws.GetPresignedDownloadURL(s3Client, cfg.AWS.Bucket, req.Key, 7*24*time.Hour)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		resp := map[string]interface{}{
+			"status":      "completed",
+			"downloadUrl": downloadURL,
+			"publicUrl":   fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.AWS.Bucket, cfg.AWS.Region, req.Key),
+		}
+		json.NewEncoder(w).Encode(resp)
 	})
 
 	fmt.Println("Server running on :8080")
