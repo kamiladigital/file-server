@@ -199,3 +199,29 @@ func (db *Database) GetRecentUploads(ctx context.Context, limit int) ([]UploadRe
 
 	return records, nil
 }
+
+// GetTotalUploadSize returns the total size in MB of all uploads in the database
+func (db *Database) GetTotalUploadSize(ctx context.Context) (float64, error) {
+	query := `SELECT COALESCE(SUM(size_mb), 0) FROM uploads`
+
+	var totalSize float64
+	err := db.pool.QueryRow(ctx, query).Scan(&totalSize)
+	if err != nil {
+		return 0, err
+	}
+
+	return totalSize, nil
+}
+
+// GetTotalUploadSizeByIP returns the total size in MB of uploads from a specific IP address
+func (db *Database) GetTotalUploadSizeByIP(ctx context.Context, ip string) (float64, error) {
+	query := `SELECT COALESCE(SUM(size_mb), 0) FROM uploads WHERE uploader_ip = $1`
+
+	var totalSize float64
+	err := db.pool.QueryRow(ctx, query, ip).Scan(&totalSize)
+	if err != nil {
+		return 0, err
+	}
+
+	return totalSize, nil
+}

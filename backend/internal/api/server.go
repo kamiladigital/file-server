@@ -74,12 +74,27 @@ func StartServer(cfg *config.Config) {
 		// Get client IP address
 		ip := getClientIP(r)
 
+		// Check total upload size limit (10GB = 10000 MB)
+		totalSizeMB, err := db.GetTotalUploadSize(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Database error checking total upload size: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		fileSizeMB := float64(req.Size) / (1024 * 1024)
+		const maxTotalSizeMB = 10000 // 10GB
+
+		if totalSizeMB+fileSizeMB > maxTotalSizeMB {
+			http.Error(w, fmt.Sprintf("Total upload size limit exceeded (10GB). Current total: %.2fMB, Requested: %.2fMB", totalSizeMB, fileSizeMB), http.StatusBadRequest)
+			return
+		}
+
 		// Log to database
 		record := &database.UploadRecord{
 			UploadID:    info.UploadID,
 			S3Key:       info.Key,
 			Filename:    filename,
-			SizeMB:      float64(req.Size) / (1024 * 1024), // Convert bytes to MB
+			SizeMB:      fileSizeMB,
 			UploaderIP:  ip,
 			PublicURL:   fileURL,
 			DownloadURL: "",
@@ -87,8 +102,8 @@ func StartServer(cfg *config.Config) {
 		}
 
 		if err := db.CreateUploadRecord(ctx, record); err != nil {
-			fmt.Printf("Warning: Failed to log upload to database: %v\n", err)
-			// Continue anyway - don't fail the upload if logging fails
+			http.Error(w, fmt.Sprintf("Database error creating upload record: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		resp := map[string]interface{}{"uploadId": info.UploadID, "key": info.Key, "url": fileURL}
@@ -108,6 +123,28 @@ func StartServer(cfg *config.Config) {
 			http.Error(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
+
+		// Check total upload size limit (10GB = 10000 MB)
+		totalSizeMB, err := db.GetTotalUploadSize(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Database error checking total upload size: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Verify the upload exists in database
+		_, err = db.GetUploadByID(ctx, req.UploadID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Database error retrieving upload record: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		const maxTotalSizeMB = 10000 // 10GB
+
+		if totalSizeMB > maxTotalSizeMB {
+			http.Error(w, fmt.Sprintf("Total upload size limit exceeded (10GB). Current total: %.2fMB", totalSizeMB), http.StatusBadRequest)
+			return
+		}
+
 		url, err := aws.GetPresignedURLForPart(s3Client, cfg.AWS.Bucket, req.Key, req.UploadID, req.PartNumber)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -156,8 +193,8 @@ func StartServer(cfg *config.Config) {
 
 		// Update database with completion info
 		if err := db.UpdateUploadCompletion(ctx, req.UploadID, publicURL, downloadURL); err != nil {
-			fmt.Printf("Warning: Failed to update upload completion in database: %v\n", err)
-			// Continue anyway - don't fail the completion if logging fails
+			http.Error(w, fmt.Sprintf("Database error updating upload completion: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		resp := map[string]interface{}{
