@@ -54,7 +54,7 @@ func StartServer(cfg *config.Config) {
 			http.Error(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		if req.Size > maxUploadBytes {
+		if req.Size <= 0 || req.Size > maxUploadBytes {
 			http.Error(w, "File exceeds maximum allowed size (1GB)", http.StatusBadRequest)
 			return
 		}
