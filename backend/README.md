@@ -42,7 +42,7 @@ The `uploads` table stores metadata about each upload:
 - `uploader_ip`: Client IP address
 - `created_at`: Upload start timestamp
 - `public_url`: Public S3 URL
-- `download_url`: Pre-signed download URL (7-day validity)
+- `download_url`: Pre-signed download URL (configurable expiry, default 4 days)
 - `completed_at`: Upload completion timestamp
 
 ## API Endpoints
