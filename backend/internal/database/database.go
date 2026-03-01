@@ -97,7 +97,6 @@ func (db *Database) UpdateUploadCompletion(ctx context.Context, uploadID, public
 	}
 	return nil
 }
-}
 
 func (db *Database) GetUploadByID(ctx context.Context, uploadID string) (*UploadRecord, error) {
 	query := `

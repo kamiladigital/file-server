@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"file-server/internal/aws"
 	"file-server/internal/config"
 	"file-server/internal/database"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	uuidv7 "github.com/samborkent/uuidv7"
 
 	"path/filepath"
@@ -54,13 +56,13 @@ func StartServer(cfg *config.Config) {
 			http.Error(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
-		if req.Size <= 0 || req.Size > maxUploadBytes {
 		if req.Size <= 0 {
 			http.Error(w, "Invalid file size: must be greater than 0", http.StatusBadRequest)
 			return
 		}
 		if req.Size > maxUploadBytes {
-			http.Error(w, "File exceeds maximum allowed size (1GB)", http.StatusBadRequest)
+			maxFileSizeGB := cfg.Server.MaxFileSizeMB / 1024
+			http.Error(w, fmt.Sprintf("File exceeds maximum allowed size (%dGB)", maxFileSizeGB), http.StatusBadRequest)
 			return
 		}
 		// generate uuidv7 per file and place under configured prefix/<uuidv7>/<basename>
@@ -147,7 +149,6 @@ func StartServer(cfg *config.Config) {
 			log.Printf("db GetUploadByID failed: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
-		}
 		}
 
 		maxTotalSizeMB := float64(cfg.Server.MaxTotalUploadMB)
