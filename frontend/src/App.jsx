@@ -89,14 +89,22 @@ export default function App(){
 
   const finalize = async () => {
     const s = uploadState.current
-    // sort parts
-    s.completedParts.sort((a,b) => a.PartNumber - b.PartNumber)
-    const response = await axios.post(`${API_BASE}/complete-multipart`, { key: s.key, uploadId: s.uploadId, parts: s.completedParts })
-    setStatus('Upload completed successfully!')
-    setStatusType('success')
-    setUploading(false)
-    // Use downloadUrl from response if available, otherwise fall back to public URL
-    setFileURL(response.data.downloadUrl || s.fileURL || '')
+    try {
+      // sort parts
+      s.completedParts.sort((a,b) => a.PartNumber - b.PartNumber)
+      const response = await axios.post(`${API_BASE}/complete-multipart`, { key: s.key, uploadId: s.uploadId, parts: s.completedParts })
+      setStatus('Upload completed successfully!')
+      setStatusType('success')
+      setUploading(false)
+      // Use downloadUrl from response if available, otherwise fall back to public URL
+      setFileURL(response.data.downloadUrl || s.fileURL || '')
+    } catch (err) {
+      console.error('Error finalizing upload:', err)
+      const errorMsg = err.response?.data || err.message || 'Unknown error finalizing upload'
+      setStatus(`Failed to complete upload: ${errorMsg}`)
+      setStatusType('error')
+      setUploading(false)
+    }
   }
 
   const handleFileSelect = (file) => {
@@ -130,9 +138,11 @@ export default function App(){
       setProgress(0)
       startWorkers()
     } catch (err) {
-      console.error(err)
-      setStatus('Failed to initiate upload')
+      console.error('Error initiating upload:', err)
+      const errorMsg = err.response?.data || err.message || 'Failed to initiate upload'
+      setStatus(errorMsg)
       setStatusType('error')
+      setSelectedFile(null)
     }
   }
 
@@ -192,7 +202,7 @@ export default function App(){
           </svg>
         </div>
         <h1>Direct S3 Chunked Uploader</h1>
-        <p>Upload files up to {parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') / 1024}GB with resumable chunked uploads</p>
+        <p>Upload files up to {parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') / 1024}GB with chunked uploads</p>
       </div>
 
       <div className="card">

@@ -64,8 +64,6 @@ func Load() *Config {
 		awsCfg.S3Prefix = awsCfg.S3Prefix + "/"
 	}
 
-	awsCfg.S3Prefix = awsCfg.S3Prefix + "\\"
-
 	// Load database config
 	dbCfg := DatabaseConfig{
 		URL: os.Getenv("DATABASE_URL"),
