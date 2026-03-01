@@ -55,8 +55,12 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 		if req.Size <= 0 || req.Size > maxUploadBytes {
-			maxFileSizeGB := cfg.Server.MaxFileSizeMB / 1024
-			http.Error(w, fmt.Sprintf("File exceeds maximum allowed size (%dGB)", maxFileSizeGB), http.StatusBadRequest)
+		if req.Size <= 0 {
+			http.Error(w, "Invalid file size: must be greater than 0", http.StatusBadRequest)
+			return
+		}
+		if req.Size > maxUploadBytes {
+			http.Error(w, "File exceeds maximum allowed size (1GB)", http.StatusBadRequest)
 			return
 		}
 		// generate uuidv7 per file and place under configured prefix/<uuidv7>/<basename>
