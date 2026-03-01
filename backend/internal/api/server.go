@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"file-server/internal/aws"
 	"file-server/internal/config"
 	"file-server/internal/database"
@@ -14,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	uuidv7 "github.com/samborkent/uuidv7"
 
 	"path/filepath"
@@ -97,24 +95,18 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 
-		// Log to database
-		record := &database.UploadRecord{
-			UploadID:    info.UploadID,
-			S3Key:       info.Key,
-			Filename:    filename,
-			SizeMB:      fileSizeMB,
-			UploaderIP:  ip,
-			PublicURL:   fileURL,
-			DownloadURL: "",
-			CompletedAt: nil,
-		}
+		// Store upload info in memory (not in database yet)
+		// We'll create the database record only after upload completion
+		// This avoids having null download_url in the database
 
-		if err := db.CreateUploadRecord(ctx, record); err != nil {
-			http.Error(w, fmt.Sprintf("Database error creating upload record: %v", err), http.StatusInternalServerError)
-			return
+		resp := map[string]interface{}{
+			"uploadId":   info.UploadID,
+			"key":        info.Key,
+			"url":        fileURL,
+			"fileSizeMB": fileSizeMB,
+			"uploaderIP": ip,
+			"filename":   filename,
 		}
-
-		resp := map[string]interface{}{"uploadId": info.UploadID, "key": info.Key, "url": fileURL}
 		json.NewEncoder(w).Encode(resp)
 	})
 
@@ -136,18 +128,6 @@ func StartServer(cfg *config.Config) {
 		totalSizeMB, err := db.GetTotalUploadSize(ctx)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Database error checking total upload size: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		// Verify the upload exists in database
-		_, err = db.GetUploadByID(r.Context(), req.UploadID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				http.Error(w, "Upload not found", http.StatusNotFound)
-				return
-			}
-			log.Printf("db GetUploadByID failed: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 

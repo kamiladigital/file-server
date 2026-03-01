@@ -29,6 +29,7 @@ type ServerConfig struct {
 	DownloadURLExpiryDays int
 	MaxTotalUploadMB      int
 	MaxFileSizeMB         int
+	ChunkSizeMB           int
 }
 
 type Config struct {
@@ -56,12 +57,14 @@ func Load() *Config {
 
 	// Set default S3 prefix if not provided
 	if awsCfg.S3Prefix == "" {
-		awsCfg.S3Prefix = "fileserver/"
+		log.Fatal("Missing S3_PREFIX in environment variables")
 	}
 	// Ensure prefix ends with slash
 	if !strings.HasSuffix(awsCfg.S3Prefix, "/") {
 		awsCfg.S3Prefix = awsCfg.S3Prefix + "/"
 	}
+
+	awsCfg.S3Prefix = awsCfg.S3Prefix + "\\"
 
 	// Load database config
 	dbCfg := DatabaseConfig{
@@ -104,10 +107,22 @@ func Load() *Config {
 		}
 	}
 
+	// Load chunk size (default 1MB)
+	chunkSizeMBStr := os.Getenv("CHUNK_SIZE_MB")
+	chunkSizeMB := 1 // default 1MB
+	if chunkSizeMBStr != "" {
+		if mb, err := strconv.Atoi(chunkSizeMBStr); err == nil && mb > 0 {
+			chunkSizeMB = mb
+		} else {
+			log.Printf("Warning: Invalid CHUNK_SIZE_MB value '%s', using default %d MB", chunkSizeMBStr, chunkSizeMB)
+		}
+	}
+
 	serverCfg := ServerConfig{
 		DownloadURLExpiryDays: expiryDays,
 		MaxTotalUploadMB:      maxTotalUploadMB,
 		MaxFileSizeMB:         maxFileSizeMB,
+		ChunkSizeMB:           chunkSizeMB,
 	}
 
 	cfg, err := v2config.LoadDefaultConfig(context.TODO(),

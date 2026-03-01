@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,12 +33,15 @@ func NewDatabase(ctx context.Context, connString string) (*Database, error) {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
+	// Disable prepared statement caching to avoid "cached plan must not change result type" errors
+	// when schema changes (e.g., uploader_ip column type changed from INET to TEXT)
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	// Test connection
 	// Test connection
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
