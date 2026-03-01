@@ -185,9 +185,25 @@ func StartServer(cfg *config.Config) {
 
 		publicURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.AWS.Bucket, cfg.AWS.Region, req.Key)
 
-		// Update database with completion info
-		if err := db.UpdateUploadCompletion(ctx, req.UploadID, publicURL, downloadURL); err != nil {
-			http.Error(w, fmt.Sprintf("Database error updating upload completion: %v", err), http.StatusInternalServerError)
+		// Extract filename from key (format: prefix/uuid/filename)
+		// Get filename from S3 key path
+		parts := strings.Split(req.Key, "/")
+		filename := parts[len(parts)-1]
+
+		// Create/insert upload record with completion info
+		completedTime := time.Now()
+		uploadRecord := &database.UploadRecord{
+			UploadID:    req.UploadID,
+			S3Key:       req.Key,
+			Filename:    filename,
+			SizeMB:      0,  // We don't have this in complete-multipart, can be 0 or retrieved from initiate
+			UploaderIP:  "", // We don't have this in complete-multipart
+			PublicURL:   publicURL,
+			DownloadURL: downloadURL,
+			CompletedAt: &completedTime,
+		}
+		if err := db.CreateUploadRecord(ctx, uploadRecord); err != nil {
+			http.Error(w, fmt.Sprintf("Database error inserting upload completion: %v", err), http.StatusInternalServerError)
 			return
 		}
 

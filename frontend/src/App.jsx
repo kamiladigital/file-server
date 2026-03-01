@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react'
 import axios from 'axios'
 
-const CHUNK_SIZE = parseInt(import.meta.env.VITE_CHUNK_SIZE_MB || '1') * 1024 * 1024 // Default 1MB
+const CHUNK_SIZE = parseFloat(import.meta.env.VITE_CHUNK_SIZE_MB || '5.5') * 1024 * 1024 // Default 5.5MB
 const MAX_BYTES = parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') * 1024 * 1024 // Default 1GB
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 const CONCURRENCY = 4
