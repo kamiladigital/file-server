@@ -219,12 +219,21 @@ func getClientIP(r *http.Request) string {
 		// X-Forwarded-For can contain multiple IPs, take the first one
 		ips := strings.Split(forwarded, ",")
 		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
+			ip := strings.TrimSpace(ips[0])
+			// Remove brackets from IPv6 addresses
+			if strings.HasPrefix(ip, "[") && strings.HasSuffix(ip, "]") {
+				ip = ip[1 : len(ip)-1]
+			}
+			return ip
 		}
 	}
 
 	// Check for X-Real-IP header
 	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		// Remove brackets from IPv6 addresses
+		if strings.HasPrefix(realIP, "[") && strings.HasSuffix(realIP, "]") {
+			realIP = realIP[1 : len(realIP)-1]
+		}
 		return realIP
 	}
 
@@ -233,6 +242,10 @@ func getClientIP(r *http.Request) string {
 	// Remove port if present
 	if colon := strings.LastIndex(ip, ":"); colon != -1 {
 		ip = ip[:colon]
+	}
+	// Remove brackets from IPv6 addresses
+	if strings.HasPrefix(ip, "[") && strings.HasSuffix(ip, "]") {
+		ip = ip[1 : len(ip)-1]
 	}
 	return ip
 }

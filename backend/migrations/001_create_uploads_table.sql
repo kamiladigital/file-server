@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS uploads (
     s3_key VARCHAR(1024) NOT NULL,
     filename VARCHAR(512) NOT NULL,
     size_mb DECIMAL(10, 2) NOT NULL,
-    uploader_ip INET NOT NULL,
+    uploader_ip TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     public_url VARCHAR(1024),
     download_url VARCHAR(1024),
