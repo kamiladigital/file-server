@@ -88,8 +88,15 @@ func (db *Database) UpdateUploadCompletion(ctx context.Context, uploadID, public
 		WHERE upload_id = $3
 	`
 
-	_, err := db.pool.Exec(ctx, query, publicURL, downloadURL, uploadID)
-	return err
+	tag, err := db.pool.Exec(ctx, query, publicURL, downloadURL, uploadID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("no upload found for upload_id %q", uploadID)
+	}
+	return nil
+}
 }
 
 func (db *Database) GetUploadByID(ctx context.Context, uploadID string) (*UploadRecord, error) {
