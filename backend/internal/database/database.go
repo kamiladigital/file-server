@@ -165,6 +165,9 @@ func (db *Database) GetUploadsByIP(ctx context.Context, ip string, limit int) ([
 		}
 		records = append(records, record)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return records, nil
 }
