@@ -219,7 +219,9 @@ func StartServer(cfg *config.Config) {
 	})
 
 	fmt.Println("Server running on :8080")
-	http.ListenAndServe(":8080", nil)
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }
 
 // getClientIP extracts the client IP address from the request
