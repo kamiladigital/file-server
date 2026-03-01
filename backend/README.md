@@ -53,12 +53,12 @@ The `uploads` table stores metadata about each upload:
 
 Curl examples
 
-- Initiate multipart upload:
+- Initiate multipart upload (note: key should be just the filename, not including the S3 prefix):
 
 ```bash
 curl -s -X POST http://localhost:8080/initiate-multipart \
    -H "Content-Type: application/json" \
-   -d '{"key":"fileserver/hello.txt","size":12345}'
+   -d '{"key":"hello.txt","size":12345}'
 ```
 
 - Request a presigned URL for part 1:
@@ -66,7 +66,7 @@ curl -s -X POST http://localhost:8080/initiate-multipart \
 ```bash
 curl -s -X POST http://localhost:8080/presign-part \
    -H "Content-Type: application/json" \
-   -d '{"key":"fileserver/hello.txt","uploadId":"<UPLOAD_ID>","partNumber":1}'
+   -d '{"key":"<RETURNED_KEY_FROM_INITIATE>","uploadId":"<UPLOAD_ID>","partNumber":1}'
 ```
 
 - Upload part using the presigned URL (replace `<URL>`):
@@ -80,8 +80,10 @@ echo -n "Hello World" | curl -s -X PUT --data-binary @- -H "Content-Type: text/p
 ```bash
 curl -s -X POST http://localhost:8080/complete-multipart \
    -H "Content-Type: application/json" \
-   -d '{"key":"fileserver/hello.txt","uploadId":"<UPLOAD_ID>","parts":[{"etag":"<ETAG>","partNumber":1}]}'
+   -d '{"key":"<RETURNED_KEY_FROM_INITIATE>","uploadId":"<UPLOAD_ID>","parts":[{"etag":"<ETAG>","partNumber":1}]}'
 ```
+
+**Note:** The `key` in the initiate request should be just the filename (e.g., "hello.txt"). The backend will automatically prepend the `S3_PREFIX` environment variable (default: "fileserver/") and a UUIDv7 folder to create the final S3 key.
 
 Smoke test (Go)
 
@@ -104,6 +106,8 @@ See `env.sample` for required variables:
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key
 - `AWS_REGION`: AWS region (e.g., us-east-1)
 - `AWS_BUCKET`: S3 bucket name
+- `S3_PREFIX`: S3 key prefix (default: "fileserver/")
+- `DOWNLOAD_URL_EXPIRY_DAYS`: Expiry days for download URLs (default: 4)
 - `DATABASE_URL`: PostgreSQL connection URL
 
 ## License

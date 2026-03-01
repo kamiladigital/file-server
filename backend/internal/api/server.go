@@ -58,11 +58,11 @@ func StartServer(cfg *config.Config) {
 			http.Error(w, "File exceeds maximum allowed size (1GB)", http.StatusBadRequest)
 			return
 		}
-		// generate uuidv7 per file and place under fileserver/<uuidv7>/<basename>
+		// generate uuidv7 per file and place under configured prefix/<uuidv7>/<basename>
 		u := uuidv7.New()
 		uidStr := u.String()
 		filename := filepath.Base(req.Key)
-		targetKey := filepath.Join("fileserver", uidStr, filename)
+		targetKey := filepath.Join(cfg.AWS.S3Prefix, uidStr, filename)
 		info, err := aws.InitiateMultipartUpload(s3Client, cfg.AWS.Bucket, targetKey)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -145,8 +145,8 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 
-		// Generate a presigned URL for download (valid for 7 days) as a fallback
-		downloadURL, err := aws.GetPresignedDownloadURL(s3Client, cfg.AWS.Bucket, req.Key, 7*24*time.Hour)
+		// Generate a presigned URL for download with configurable expiry
+		downloadURL, err := aws.GetPresignedDownloadURL(s3Client, cfg.AWS.Bucket, req.Key, time.Duration(cfg.Server.DownloadURLExpiryDays)*24*time.Hour)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

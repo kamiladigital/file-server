@@ -2,53 +2,84 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"time"
-
-	awsint "file-server/internal/aws"
-	cfgpkg "file-server/internal/config"
-
-	uuidv7 "github.com/samborkent/uuidv7"
-
-	v2aws "github.com/aws/aws-sdk-go-v2/aws"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 func main() {
-	cfg := cfgpkg.Load()
-	s3Client := awsint.NewS3(&cfg.AWS)
+	// Test the API endpoints
+	baseURL := "http://localhost:8080"
+	filename := fmt.Sprintf("test-%d.txt", time.Now().Unix())
+	fileSize := int64(len("Hello World"))
 
-	// Initiate multipart under fileserver/ prefix
-	// create per-file uuidv7 folder
-	u := uuidv7.New()
-	uidStr := u.String()
-	key := fmt.Sprintf("fileserver/%s/hello-%d.txt", uidStr, time.Now().Unix())
-	info, err := awsint.InitiateMultipartUpload(s3Client, cfg.AWS.Bucket, key)
-	if err != nil {
-		log.Fatalf("initiate failed: %v", err)
+	// 1. Initiate multipart upload
+	initReq := map[string]interface{}{
+		"key":  filename,
+		"size": fileSize,
 	}
-	fmt.Printf("Initiated upload: uploadId=%s key=%s\n", info.UploadID, info.Key)
+	initJSON, _ := json.Marshal(initReq)
 
-	// Presign part 1
-	url, err := awsint.GetPresignedURLForPart(s3Client, cfg.AWS.Bucket, key, info.UploadID, 1)
+	resp, err := http.Post(baseURL+"/initiate-multipart", "application/json", bytes.NewReader(initJSON))
 	if err != nil {
-		log.Fatalf("presign failed: %v", err)
+		log.Fatalf("Failed to initiate multipart upload: %v", err)
 	}
-	fmt.Printf("Presigned URL for part 1: %s\n", url)
+	defer resp.Body.Close()
 
-	// Upload 'Hello World' as part 1 using HTTP PUT
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("Initiate failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var initResult map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&initResult); err != nil {
+		log.Fatalf("Failed to decode response: %v", err)
+	}
+
+	uploadID := initResult["uploadId"].(string)
+	key := initResult["key"].(string)
+	fmt.Printf("Initiated upload: uploadId=%s key=%s\n", uploadID, key)
+
+	// 2. Get presigned URL for part 1
+	presignReq := map[string]interface{}{
+		"key":        key,
+		"uploadId":   uploadID,
+		"partNumber": 1,
+	}
+	presignJSON, _ := json.Marshal(presignReq)
+
+	resp, err = http.Post(baseURL+"/presign-part", "application/json", bytes.NewReader(presignJSON))
+	if err != nil {
+		log.Fatalf("Failed to get presigned URL: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("Presign failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var presignResult map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&presignResult); err != nil {
+		log.Fatalf("Failed to decode presign response: %v", err)
+	}
+
+	presignedURL := presignResult["url"].(string)
+	fmt.Printf("Presigned URL for part 1: %s\n", presignedURL)
+
+	// 3. Upload part using presigned URL
 	body := []byte("Hello World")
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(body))
+	req, err := http.NewRequest("PUT", presignedURL, bytes.NewReader(body))
 	if err != nil {
 		log.Fatalf("create request failed: %v", err)
 	}
 	req.Header.Set("Content-Type", "text/plain")
 	req.ContentLength = int64(len(body))
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err = client.Do(req)
 	if err != nil {
 		log.Fatalf("upload part failed: %v", err)
 	}
@@ -60,10 +91,36 @@ func main() {
 	etag := resp.Header.Get("ETag")
 	fmt.Printf("Uploaded part1, ETag=%s\n", etag)
 
-	// Complete multipart
-	parts := []s3types.CompletedPart{{ETag: &etag, PartNumber: v2aws.Int32(1)}}
-	if err := awsint.CompleteMultipartUpload(s3Client, cfg.AWS.Bucket, key, info.UploadID, parts); err != nil {
-		log.Fatalf("complete failed: %v", err)
+	// 4. Complete multipart upload
+	completeReq := map[string]interface{}{
+		"key":      key,
+		"uploadId": uploadID,
+		"parts": []map[string]interface{}{
+			{
+				"etag":       etag,
+				"partNumber": 1,
+			},
+		},
 	}
-	fmt.Printf("Completed multipart upload for key=%s\n", key)
+	completeJSON, _ := json.Marshal(completeReq)
+
+	resp, err = http.Post(baseURL+"/complete-multipart", "application/json", bytes.NewReader(completeJSON))
+	if err != nil {
+		log.Fatalf("Failed to complete multipart upload: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("Complete failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var completeResult map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&completeResult); err != nil {
+		log.Fatalf("Failed to decode complete response: %v", err)
+	}
+
+	fmt.Printf("Completed multipart upload: status=%s\n", completeResult["status"])
+	fmt.Printf("Public URL: %s\n", completeResult["publicUrl"])
+	fmt.Printf("Download URL: %s\n", completeResult["downloadUrl"])
 }
