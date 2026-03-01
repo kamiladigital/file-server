@@ -2,7 +2,10 @@ import React, { useState, useRef } from 'react'
 import axios from 'axios'
 
 const CHUNK_SIZE = parseFloat(import.meta.env.VITE_CHUNK_SIZE_MB || '5.5') * 1024 * 1024 // Default 5.5MB
-const MAX_BYTES = parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') * 1024 * 1024 // Default 1GB
+const rawMaxFileSizeMB = Number.parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB ?? '1024', 10)
+const MAX_FILE_SIZE_MB = Number.isFinite(rawMaxFileSizeMB) && rawMaxFileSizeMB > 0 ? rawMaxFileSizeMB : 1024
+const MAX_FILE_SIZE_GB = MAX_FILE_SIZE_MB / 1024
+const MAX_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024 // Default 1GB
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 const CONCURRENCY = 4
 const MAX_RETRIES = 3
