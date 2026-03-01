@@ -138,10 +138,16 @@ func StartServer(cfg *config.Config) {
 		}
 
 		// Verify the upload exists in database
-		_, err = db.GetUploadByID(ctx, req.UploadID)
+		_, err = db.GetUploadByID(r.Context(), req.UploadID)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Database error retrieving upload record: %v", err), http.StatusInternalServerError)
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, "Upload not found", http.StatusNotFound)
+				return
+			}
+			log.Printf("db GetUploadByID failed: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
+		}
 		}
 
 		maxTotalSizeMB := float64(cfg.Server.MaxTotalUploadMB)
