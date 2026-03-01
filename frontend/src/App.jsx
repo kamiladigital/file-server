@@ -22,7 +22,6 @@ export default function App(){
   const [fileURL, setFileURL] = useState('')
   const [selectedFile, setSelectedFile] = useState(null)
   const [isUploading, setUploading] = useState(false)
-  const [isPaused, setPaused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
 
   const uploadState = useRef({
@@ -39,7 +38,6 @@ export default function App(){
   }
 
   const uploadNext = async () => {
-    if (isPaused) return
     const s = uploadState.current
     const part = s.queue.shift()
     if (!part) return
@@ -57,11 +55,6 @@ export default function App(){
 
     let attempt = 0
     while (attempt <= MAX_RETRIES) {
-      if (isPaused) {
-        // requeue and stop
-        s.queue.unshift(partNumber)
-        return
-      }
       try {
         // get presigned url
         const presign = await axios.post(`${API_BASE}/presign-part`, { uploadId: s.uploadId, key: s.key, partNumber })
@@ -102,7 +95,6 @@ export default function App(){
     setStatus('Upload completed successfully!')
     setStatusType('success')
     setUploading(false)
-    setPaused(false)
     // Use downloadUrl from response if available, otherwise fall back to public URL
     setFileURL(response.data.downloadUrl || s.fileURL || '')
   }
@@ -133,7 +125,6 @@ export default function App(){
       const total = uploadState.current.totalChunks
       uploadState.current.queue = Array.from({length: total}, (_,i) => i+1)
       setUploading(true)
-      setPaused(false)
       setStatus(`Uploading ${total} parts...`)
       setStatusType('info')
       setProgress(0)
@@ -167,21 +158,7 @@ export default function App(){
     handleFileSelect(file)
   }
 
-  const handlePause = () => {
-    setPaused(true)
-    setStatus('Paused')
-    setStatusType('warning')
-    const s = uploadState.current
-    // abort ongoing
-    Object.values(s.controllers).forEach(ctrl => { try { ctrl.abort() } catch (e) {} })
-  }
 
-  const handleResume = () => {
-    setPaused(false)
-    setStatus('Resuming...')
-    setStatusType('info')
-    startWorkers()
-  }
 
   const handleRemoveFile = () => {
     setSelectedFile(null)
@@ -190,7 +167,6 @@ export default function App(){
     setProgress(0)
     setFileURL('')
     setUploading(false)
-    setPaused(false)
     uploadState.current = {
       uploadId: null,
       key: null,
@@ -280,9 +256,7 @@ export default function App(){
                 </svg>
                 {uploadState.current.completedParts?.length || 0} / {uploadState.current.totalChunks} parts
               </span>
-              <span>
-                {isPaused ? 'Paused' : 'Uploading...'}
-              </span>
+              <span>Uploading...</span>
             </div>
           </div>
         )}
@@ -313,24 +287,7 @@ export default function App(){
           </div>
         )}
 
-        <div className="controls">
-          {isUploading && !isPaused && (
-            <button className="btn btn-secondary" onClick={handlePause}>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
-              </svg>
-              Pause
-            </button>
-          )}
-          {isUploading && isPaused && (
-            <button className="btn btn-primary" onClick={handleResume}>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
-              </svg>
-              Resume
-            </button>
-          )}
-        </div>
+        <div className="controls"></div>
 
         {fileURL && (
           <div className="result">
