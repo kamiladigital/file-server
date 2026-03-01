@@ -23,7 +23,7 @@ import (
 
 func StartServer(cfg *config.Config) {
 	s3Client := aws.NewS3(&cfg.AWS)
-	const maxUploadBytes = 1 * 1024 * 1024 * 1024 // 1GB
+	maxUploadBytes := int64(cfg.Server.MaxFileSizeMB) * 1024 * 1024 // Convert MB to bytes
 
 	// Initialize database connection
 	ctx := context.Background()
@@ -55,7 +55,8 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 		if req.Size <= 0 || req.Size > maxUploadBytes {
-			http.Error(w, "File exceeds maximum allowed size (1GB)", http.StatusBadRequest)
+			maxFileSizeGB := cfg.Server.MaxFileSizeMB / 1024
+			http.Error(w, fmt.Sprintf("File exceeds maximum allowed size (%dGB)", maxFileSizeGB), http.StatusBadRequest)
 			return
 		}
 		// generate uuidv7 per file and place under configured prefix/<uuidv7>/<basename>
@@ -82,10 +83,11 @@ func StartServer(cfg *config.Config) {
 		}
 
 		fileSizeMB := float64(req.Size) / (1024 * 1024)
-		const maxTotalSizeMB = 10000 // 10GB
+		maxTotalSizeMB := float64(cfg.Server.MaxTotalUploadMB)
 
 		if totalSizeMB+fileSizeMB > maxTotalSizeMB {
-			http.Error(w, fmt.Sprintf("Total upload size limit exceeded (10GB). Current total: %.2fMB, Requested: %.2fMB", totalSizeMB, fileSizeMB), http.StatusBadRequest)
+			maxTotalSizeGB := cfg.Server.MaxTotalUploadMB / 1024
+			http.Error(w, fmt.Sprintf("Total upload size limit exceeded (%dGB). Current total: %.2fMB, Requested: %.2fMB", maxTotalSizeGB, totalSizeMB, fileSizeMB), http.StatusBadRequest)
 			return
 		}
 
@@ -138,10 +140,11 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 
-		const maxTotalSizeMB = 10000 // 10GB
+		maxTotalSizeMB := float64(cfg.Server.MaxTotalUploadMB)
 
 		if totalSizeMB > maxTotalSizeMB {
-			http.Error(w, fmt.Sprintf("Total upload size limit exceeded (10GB). Current total: %.2fMB", totalSizeMB), http.StatusBadRequest)
+			maxTotalSizeGB := cfg.Server.MaxTotalUploadMB / 1024
+			http.Error(w, fmt.Sprintf("Total upload size limit exceeded (%dGB). Current total: %.2fMB", maxTotalSizeGB, totalSizeMB), http.StatusBadRequest)
 			return
 		}
 

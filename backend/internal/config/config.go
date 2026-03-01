@@ -27,6 +27,8 @@ type DatabaseConfig struct {
 
 type ServerConfig struct {
 	DownloadURLExpiryDays int
+	MaxTotalUploadMB      int
+	MaxFileSizeMB         int
 }
 
 type Config struct {
@@ -80,8 +82,32 @@ func Load() *Config {
 		}
 	}
 
+	// Load max total upload limit (default 10GB = 10000 MB)
+	maxTotalUploadMBStr := os.Getenv("MAX_TOTAL_UPLOAD_MB")
+	maxTotalUploadMB := 10000 // default 10GB
+	if maxTotalUploadMBStr != "" {
+		if mb, err := strconv.Atoi(maxTotalUploadMBStr); err == nil && mb > 0 {
+			maxTotalUploadMB = mb
+		} else {
+			log.Printf("Warning: Invalid MAX_TOTAL_UPLOAD_MB value '%s', using default %d MB", maxTotalUploadMBStr, maxTotalUploadMB)
+		}
+	}
+
+	// Load max file size limit (default 1GB = 1024 MB)
+	maxFileSizeMBStr := os.Getenv("MAX_FILE_SIZE_MB")
+	maxFileSizeMB := 1024 // default 1GB
+	if maxFileSizeMBStr != "" {
+		if mb, err := strconv.Atoi(maxFileSizeMBStr); err == nil && mb > 0 {
+			maxFileSizeMB = mb
+		} else {
+			log.Printf("Warning: Invalid MAX_FILE_SIZE_MB value '%s', using default %d MB", maxFileSizeMBStr, maxFileSizeMB)
+		}
+	}
+
 	serverCfg := ServerConfig{
 		DownloadURLExpiryDays: expiryDays,
+		MaxTotalUploadMB:      maxTotalUploadMB,
+		MaxFileSizeMB:         maxFileSizeMB,
 	}
 
 	cfg, err := v2config.LoadDefaultConfig(context.TODO(),
