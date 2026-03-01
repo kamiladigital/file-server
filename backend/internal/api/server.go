@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	uuidv7 "github.com/samborkent/uuidv7"
@@ -25,14 +24,6 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-// UploadMetadata stores information about uploads in progress
-type UploadMetadata struct {
-	FileSizeMB float64
-	UploaderIP string
-	CreatedAt  time.Time
-	Key        string // S3 key for tracking
-}
-
 // ProcessedPart tracks which parts have been uploaded to prevent reprocessing
 type ProcessedPart struct {
 	UploadID   string
@@ -40,18 +31,6 @@ type ProcessedPart struct {
 }
 
 var (
-	// In-memory store for upload metadata (uploadID -> metadata)
-	uploadMetadata = make(map[string]UploadMetadata)
-	metadataMutex  = &sync.RWMutex{}
-
-	// Track active uploads to prevent concurrent uploads with same ID
-	activeUploads = make(map[string]bool)
-	uploadsMutex  = &sync.RWMutex{}
-
-	// Track processed parts to prevent duplicate uploads
-	processedParts = make(map[ProcessedPart]time.Time)
-	partsMutex     = &sync.RWMutex{}
-
 	// ETag validation regex (S3 ETags are quoted hex strings)
 	etagRegex = regexp.MustCompile(`^"[a-f0-9]{32}(-\d+)?"$`)
 
@@ -76,7 +55,7 @@ func StartServer(cfg *config.Config) {
 	defer db.Close()
 
 	// Start cleanup goroutine for expired metadata and processed parts
-	go cleanupExpiredData()
+	go cleanupExpiredData(db)
 
 	// CORS is handled by internal/middleware.ApplyCORS
 
@@ -150,20 +129,21 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 
-		// Track active upload
-		uploadsMutex.Lock()
-		activeUploads[info.UploadID] = true
-		uploadsMutex.Unlock()
-
-		// Store upload metadata for later retrieval (when upload completes)
-		metadataMutex.Lock()
-		uploadMetadata[info.UploadID] = UploadMetadata{
+		// Store upload metadata in database
+		uploadMetadata := &database.UploadMetadata{
+			UploadID:   info.UploadID,
 			FileSizeMB: fileSizeMB,
 			UploaderIP: ip,
 			CreatedAt:  time.Now(),
-			Key:        targetKey,
+			S3Key:      targetKey,
+			Filename:   filename,
 		}
-		metadataMutex.Unlock()
+
+		if err := db.CreateUploadMetadata(ctx, uploadMetadata); err != nil {
+			log.Printf("[%s] Database error storing upload metadata: %v", reqID, err)
+			http.Error(w, fmt.Sprintf("Database error storing upload metadata: %v", err), http.StatusInternalServerError)
+			return
+		}
 
 		log.Printf("[%s] Upload initiated for %s (%.2fMB) from %s", reqID, filename, fileSizeMB, ip)
 
@@ -195,12 +175,14 @@ func StartServer(cfg *config.Config) {
 		}
 
 		// Check for duplicate part upload (race condition prevention)
-		partKey := ProcessedPart{UploadID: req.UploadID, PartNumber: req.PartNumber}
-		partsMutex.RLock()
-		_, exists := processedParts[partKey]
-		partsMutex.RUnlock()
+		partExists, err := db.IsPartProcessed(ctx, req.UploadID, req.PartNumber)
+		if err != nil {
+			log.Printf("[%s] Database error checking processed part: %v", reqID, err)
+			http.Error(w, "Database error checking part status", http.StatusInternalServerError)
+			return
+		}
 
-		if exists {
+		if partExists {
 			log.Printf("[%s] Duplicate part request detected: %s part %d", reqID, req.UploadID, req.PartNumber)
 			// Return 409 Conflict to indicate duplicate, client should retry
 			http.Error(w, "Part already being processed", http.StatusConflict)
@@ -208,9 +190,11 @@ func StartServer(cfg *config.Config) {
 		}
 
 		// Mark part as being processed
-		partsMutex.Lock()
-		processedParts[partKey] = time.Now()
-		partsMutex.Unlock()
+		if err := db.MarkPartAsProcessed(ctx, req.UploadID, req.PartNumber); err != nil {
+			log.Printf("[%s] Database error marking part as processed: %v", reqID, err)
+			http.Error(w, "Database error marking part as processed", http.StatusInternalServerError)
+			return
+		}
 
 		// Create a context with timeout for S3 presign operation
 		presignCtx, cancel := context.WithTimeout(ctx, presignTimeout)
@@ -299,36 +283,28 @@ func StartServer(cfg *config.Config) {
 		parts := strings.Split(req.Key, "/")
 		filename := parts[len(parts)-1]
 
-		// Retrieve stored metadata from initiate phase
-		metadataMutex.RLock()
-		metadata, ok := uploadMetadata[req.UploadID]
-		metadataMutex.RUnlock()
+		// Retrieve stored metadata from database
+		metadata, err := db.GetUploadMetadata(ctx, req.UploadID)
 
 		// Default values if metadata not found (shouldn't happen in normal flow)
 		sizeMB := float64(0)
 		uploaderIP := ""
-		if ok {
+		if err != nil {
+			log.Printf("[%s] Warning: Unable to retrieve upload metadata: %v", reqID, err)
+		} else {
 			sizeMB = metadata.FileSizeMB
 			uploaderIP = metadata.UploaderIP
-			// Clean up metadata after retrieval
-			metadataMutex.Lock()
-			delete(uploadMetadata, req.UploadID)
-			metadataMutex.Unlock()
 		}
 
-		// Remove active upload tracking
-		uploadsMutex.Lock()
-		delete(activeUploads, req.UploadID)
-		uploadsMutex.Unlock()
-
-		// Clean up processed parts from this upload
-		partsMutex.Lock()
-		for partKey := range processedParts {
-			if partKey.UploadID == req.UploadID {
-				delete(processedParts, partKey)
-			}
+		// Clean up upload metadata from database
+		if err := db.DeleteUploadMetadata(ctx, req.UploadID); err != nil {
+			log.Printf("[%s] Warning: Failed to delete upload metadata: %v", reqID, err)
 		}
-		partsMutex.Unlock()
+
+		// Clean up processed parts from database
+		if err := db.DeleteProcessedParts(ctx, req.UploadID); err != nil {
+			log.Printf("[%s] Warning: Failed to delete processed parts: %v", reqID, err)
+		}
 
 		// Create/insert upload record with completion info
 		completedTime := time.Now()
@@ -409,36 +385,28 @@ func generateRequestID() string {
 	return hex.EncodeToString(b)
 }
 
-// cleanupExpiredData removes expired metadata and processed parts from memory
-func cleanupExpiredData() {
+// cleanupExpiredData removes expired metadata and processed parts from database
+func cleanupExpiredData(db *database.Database) {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		now := time.Now()
+		ctx := context.Background()
 
 		// Cleanup expired metadata (uploads that never completed)
-		metadataMutex.Lock()
-		for uploadID, metadata := range uploadMetadata {
-			if now.Sub(metadata.CreatedAt) > metadataMaxAge {
-				log.Printf("Cleaning up expired metadata for upload %s", uploadID)
-				delete(uploadMetadata, uploadID)
-				// Also remove from active uploads tracking
-				uploadsMutex.Lock()
-				delete(activeUploads, uploadID)
-				uploadsMutex.Unlock()
-			}
+		deletedMetadata, err := db.CleanupExpiredMetadata(ctx, metadataMaxAge)
+		if err != nil {
+			log.Printf("Error cleaning up expired metadata: %v", err)
+		} else if deletedMetadata > 0 {
+			log.Printf("Cleaned up %d expired upload metadata record(s)", deletedMetadata)
 		}
-		metadataMutex.Unlock()
 
 		// Cleanup expired processed parts (should be cleaned on completion, but just in case)
-		partsMutex.Lock()
-		for partKey, createdTime := range processedParts {
-			if now.Sub(createdTime) > metadataMaxAge {
-				log.Printf("Cleaning up stale processed part: %s part %d", partKey.UploadID, partKey.PartNumber)
-				delete(processedParts, partKey)
-			}
+		deletedParts, err := db.CleanupExpiredProcessedParts(ctx, metadataMaxAge)
+		if err != nil {
+			log.Printf("Error cleaning up expired processed parts: %v", err)
+		} else if deletedParts > 0 {
+			log.Printf("Cleaned up %d stale processed part(s)", deletedParts)
 		}
-		partsMutex.Unlock()
 	}
 }

@@ -23,6 +23,15 @@ type UploadRecord struct {
 	CompletedAt *time.Time
 }
 
+type UploadMetadata struct {
+	UploadID   string
+	FileSizeMB float64
+	UploaderIP string
+	CreatedAt  time.Time
+	S3Key      string
+	Filename   string
+}
+
 type Database struct {
 	pool *pgxpool.Pool
 }
@@ -239,4 +248,141 @@ func (db *Database) GetTotalUploadSizeByIP(ctx context.Context, ip string) (floa
 	}
 
 	return totalSize, nil
+}
+
+// ========== Upload Metadata Management ==========
+
+// CreateUploadMetadata stores metadata for an upload in progress
+func (db *Database) CreateUploadMetadata(ctx context.Context, metadata *UploadMetadata) error {
+	query := `
+		INSERT INTO upload_metadata (upload_id, file_size_mb, uploader_ip, s3_key, filename, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := db.pool.Exec(ctx, query,
+		metadata.UploadID,
+		metadata.FileSizeMB,
+		metadata.UploaderIP,
+		metadata.S3Key,
+		metadata.Filename,
+		metadata.CreatedAt,
+	)
+	return err
+}
+
+// GetUploadMetadata retrieves metadata for an upload in progress
+func (db *Database) GetUploadMetadata(ctx context.Context, uploadID string) (*UploadMetadata, error) {
+	query := `
+		SELECT upload_id, file_size_mb, uploader_ip, created_at, s3_key, filename
+		FROM upload_metadata
+		WHERE upload_id = $1
+	`
+
+	var metadata UploadMetadata
+	err := db.pool.QueryRow(ctx, query, uploadID).Scan(
+		&metadata.UploadID,
+		&metadata.FileSizeMB,
+		&metadata.UploaderIP,
+		&metadata.CreatedAt,
+		&metadata.S3Key,
+		&metadata.Filename,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &metadata, nil
+}
+
+// DeleteUploadMetadata removes metadata for an upload (called after completion)
+func (db *Database) DeleteUploadMetadata(ctx context.Context, uploadID string) error {
+	query := `DELETE FROM upload_metadata WHERE upload_id = $1`
+
+	_, err := db.pool.Exec(ctx, query, uploadID)
+	return err
+}
+
+// CleanupExpiredMetadata removes metadata older than the specified duration
+func (db *Database) CleanupExpiredMetadata(ctx context.Context, maxAge time.Duration) (int64, error) {
+	query := `
+		DELETE FROM upload_metadata
+		WHERE created_at < $1
+	`
+
+	cutoffTime := time.Now().Add(-maxAge)
+	tag, err := db.pool.Exec(ctx, query, cutoffTime)
+	if err != nil {
+		return 0, err
+	}
+
+	return tag.RowsAffected(), nil
+}
+
+// IsUploadActive checks if an upload is currently in progress
+func (db *Database) IsUploadActive(ctx context.Context, uploadID string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM upload_metadata WHERE upload_id = $1)`
+
+	var exists bool
+	err := db.pool.QueryRow(ctx, query, uploadID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// ========== Processed Parts Management ==========
+
+// MarkPartAsProcessed records that a part has been uploaded
+func (db *Database) MarkPartAsProcessed(ctx context.Context, uploadID string, partNumber int32) error {
+	query := `
+		INSERT INTO processed_parts (upload_id, part_number)
+		VALUES ($1, $2)
+		ON CONFLICT (upload_id, part_number) DO NOTHING
+	`
+
+	_, err := db.pool.Exec(ctx, query, uploadID, partNumber)
+	return err
+}
+
+// IsPartProcessed checks if a part has already been uploaded
+func (db *Database) IsPartProcessed(ctx context.Context, uploadID string, partNumber int32) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM processed_parts 
+			WHERE upload_id = $1 AND part_number = $2
+		)
+	`
+
+	var exists bool
+	err := db.pool.QueryRow(ctx, query, uploadID, partNumber).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// DeleteProcessedParts removes all processed parts for an upload (called after completion)
+func (db *Database) DeleteProcessedParts(ctx context.Context, uploadID string) error {
+	query := `DELETE FROM processed_parts WHERE upload_id = $1`
+
+	_, err := db.pool.Exec(ctx, query, uploadID)
+	return err
+}
+
+// CleanupExpiredProcessedParts removes processed parts older than the specified duration
+func (db *Database) CleanupExpiredProcessedParts(ctx context.Context, maxAge time.Duration) (int64, error) {
+	query := `
+		DELETE FROM processed_parts
+		WHERE processed_at < $1
+	`
+
+	cutoffTime := time.Now().Add(-maxAge)
+	tag, err := db.pool.Exec(ctx, query, cutoffTime)
+	if err != nil {
+		return 0, err
+	}
+
+	return tag.RowsAffected(), nil
 }
