@@ -18,8 +18,13 @@ type AWSConfig struct {
 	Bucket          string
 }
 
+type DatabaseConfig struct {
+	URL string
+}
+
 type Config struct {
-	AWS AWSConfig
+	AWS      AWSConfig
+	Database DatabaseConfig
 }
 
 // Load reads environment variables (optionally from a .env file), validates them,
@@ -36,13 +41,20 @@ func Load() *Config {
 		log.Fatal("Missing AWS credentials in environment variables")
 	}
 
+	dbCfg := DatabaseConfig{
+		URL: os.Getenv("DATABASE_URL"),
+	}
+	if dbCfg.URL == "" {
+		log.Fatal("Missing DATABASE_URL in environment variables")
+	}
+
 	cfg, err := v2config.LoadDefaultConfig(context.TODO(),
 		v2config.WithRegion(awsCfg.Region),
 		v2config.WithCredentialsProvider(v2cred.NewStaticCredentialsProvider(awsCfg.AccessKeyID, awsCfg.SecretAccessKey, "")),
 	)
 	if err != nil {
 		log.Printf("warning: failed to load AWS SDK config: %v", err)
-		return &Config{AWS: awsCfg}
+		return &Config{AWS: awsCfg, Database: dbCfg}
 	}
 
 	stsClient := sts.NewFromConfig(cfg)
@@ -57,5 +69,5 @@ func Load() *Config {
 		}
 	}
 
-	return &Config{AWS: awsCfg}
+	return &Config{AWS: awsCfg, Database: dbCfg}
 }

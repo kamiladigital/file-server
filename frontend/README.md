@@ -6,15 +6,19 @@ Prerequisites
 
 Quick start (development)
 
-1. Install dependencies
+1. Copy `.env.sample` to `.env` and configure if needed:
+   ```bash
+   cp .env.sample .env
+   ```
+   Edit `.env` to change `VITE_API_BASE` if your backend runs on a different host/port.
 
+2. Install dependencies
 ```bash
 cd frontend
 npm install
 ```
 
-2. Run dev server (Vite)
-
+3. Run dev server (Vite)
 ```bash
 npm run dev
 ```
@@ -29,8 +33,8 @@ go run ./cmd/server
 ```
 
 Notes
-- The frontend talks to the backend endpoints at `http://localhost:8080` by default. If you run the backend on another host/port, update `API_BASE` in `src/App.jsx`.
-- The uploader enforces a 10GB limit on both frontend and backend.
+- The frontend talks to the backend endpoints at `http://localhost:8080` by default. If you run the backend on another host/port, update `VITE_API_BASE` in `.env` file.
+- The uploader enforces a 1GB limit on both frontend and backend.
 - The backend sets minimal CORS headers; ensure your S3 bucket CORS allows `PUT` and exposes `ETag` if needed for browsers.
 - For production, build the frontend with `npm run build` and serve the `dist/` output.
 
@@ -46,3 +50,6 @@ npm run dev
 cd ../backend
 go run ./cmd/server
 ```
+
+Environment Variables
+- `VITE_API_BASE`: Backend API base URL (default: `http://localhost:8080`)

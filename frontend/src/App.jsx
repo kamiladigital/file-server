@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react'
 import axios from 'axios'
 
 const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB
-const MAX_BYTES = 10 * 1024 * 1024 * 1024 // 10GB
-const API_BASE = 'http://localhost:8080'
+const MAX_BYTES = 1 * 1024 * 1024 * 1024 // 1GB
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 const CONCURRENCY = 4
 const MAX_RETRIES = 3
 
@@ -110,7 +110,7 @@ export default function App(){
   const handleFileSelect = (file) => {
     if (!file) return
     if (file.size > MAX_BYTES) { 
-      setStatus('File too large (max 10GB)') 
+      setStatus('File too large (max 1GB)') 
       setStatusType('error')
       return 
     }
@@ -215,7 +215,7 @@ export default function App(){
           </svg>
         </div>
         <h1>Direct S3 Chunked Uploader</h1>
-        <p>Upload files up to 10GB with resumable chunked uploads</p>
+        <p>Upload files up to 1GB with resumable chunked uploads</p>
       </div>
 
       <div className="card">
@@ -233,7 +233,7 @@ export default function App(){
               </svg>
             </div>
             <h3>Drop your file here or click to browse</h3>
-            <p>Supports files up to 10GB</p>
+            <p>Supports files up to 1GB</p>
             <input 
               type="file" 
               id="file-input"
