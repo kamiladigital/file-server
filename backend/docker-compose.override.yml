@@ -1,0 +1,22 @@
+# Docker Compose override for local development
+# This file is automatically loaded by docker-compose after docker-compose.yml
+# Customize this file for your local environment
+
+version: '3.8'
+
+services:
+  postgres:
+    # Use default values from docker-compose.yml
+    # postgres_data volume will be persisted across docker restarts
+    ports:
+      - "5432:5432"
+
+  server:
+    # For development, you can use volumes to hot-reload
+    # Uncomment the following lines to enable live reload:
+    # volumes:
+    #   - .:/app
+    # Then run: go run ./cmd/server instead of using the Dockerfile
+    
+    # Or use this to rebuild on changes:
+    # command: /bin/sh -c "air"  # requires air installed
