@@ -1,46 +1,13 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: file-server-postgres
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-file_server}
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - file-server-net
-    restart: unless-stopped
-
   server:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: file-server-app
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-file_server}?sslmode=disable
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      S3_BUCKET: ${S3_BUCKET}
-      S3_PREFIX: ${S3_PREFIX:-uploads/}
-      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-500}
-      MAX_TOTAL_UPLOAD_MB: ${MAX_TOTAL_UPLOAD_MB:-10000}
-      DOWNLOAD_URL_EXPIRY_DAYS: ${DOWNLOAD_URL_EXPIRY_DAYS:-7}
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "8080:8080"
     networks:
       - file-server-net
     restart: unless-stopped
@@ -50,10 +17,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   file-server-net:

@@ -18,9 +18,6 @@ COPY . .
 # Build the server
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
 
-# Build the migrate tool
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o migrate ./cmd/migrate
-
 # Final stage
 FROM alpine:latest
 
@@ -29,19 +26,23 @@ WORKDIR /app
 # Install runtime dependencies (ca-certificates for HTTPS)
 RUN apk --no-cache add ca-certificates tzdata
 
+# Create non-root user
+RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
+
 # Copy binaries from builder
 COPY --from=builder /app/server .
-COPY --from=builder /app/migrate .
 
-# Copy migrations directory
-COPY migrations ./migrations
+# Copy .env file
+COPY .env .
 
-# Copy .env.sample as reference
-COPY .env.sample .
+# Change ownership to appuser
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8080
 
-# Default command: run migrations then start server
-# Can be overridden to run migrate only
-CMD ["sh", "-c", "./migrate && ./server"]
+# Start the server
+CMD ["./server"]
