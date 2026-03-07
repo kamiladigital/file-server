@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react'
 import axios from 'axios'
+import './styles.css'
 
-const CHUNK_SIZE = parseFloat(import.meta.env.VITE_CHUNK_SIZE_MB || '5.5') * 1024 * 1024 // Default 5.5MB
+const CHUNK_SIZE = parseFloat(import.meta.env.VITE_CHUNK_SIZE_MB || '5.5') * 1024 * 1024
 const rawMaxFileSizeMB = Number.parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB ?? '1024', 10)
 const MAX_FILE_SIZE_MB = Number.isFinite(rawMaxFileSizeMB) && rawMaxFileSizeMB > 0 ? rawMaxFileSizeMB : 1024
 const MAX_FILE_SIZE_GB = MAX_FILE_SIZE_MB / 1024
-const MAX_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024 // Default 1GB
+const MAX_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
 const CONCURRENCY = 4
 const MAX_RETRIES = 3
@@ -18,7 +19,108 @@ function formatBytes(b) {
   return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-export default function App(){
+function formatDate(dateString) {
+  const date = new Date(dateString)
+  return date.toLocaleString()
+}
+
+function isValidFileboxName(name) {
+  if (!name || name.length === 0) return false
+  return /^[a-zA-Z0-9]+$/.test(name)
+}
+
+// Landing Page Component
+function LandingPage({ onList }) {
+  const [fileboxName, setFileboxName] = useState('')
+  const [error, setError] = useState('')
+
+  const handleAction = () => {
+    if (!fileboxName.trim()) {
+      setError('Filebox name is required')
+      return
+    }
+    if (!isValidFileboxName(fileboxName)) {
+      setError('Filebox name must be alphanumeric only')
+      return
+    }
+    setError('')
+    onList(fileboxName)
+  }
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleAction()
+    }
+  }
+
+  return (
+    <div className="page landing-page">
+      <div className="landing-container">
+        <div className="landing-header">
+          <div className="landing-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33A3 3 0 0116.5 19.5H6.75z" />
+            </svg>
+          </div>
+          <h1>File Mailbox</h1>
+          <p>Share files securely with a personalized filebox</p>
+        </div>
+
+        <div className="landing-disclaimer">
+          <div className="disclaimer-item">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 1.677A9.747 9.747 0 0012 15.75c4.896 0 9.236-1.891 12.303-4.973m0 0c-1.902-1.427-4.081-2.573-6.553-3.127m-15.403 3.127a3.744 3.744 0 00-.571 1.998h21.148c0-.concepts 0-.193-.029-.572m0 0C21.75 11.855 20.697 9.5 12 9.75c-8.697 0-9.75 2.105-9.75 5.25" />
+            </svg>
+            <span><strong>Files are public</strong> — Not intended for confidential sharing</span>
+          </div>
+          <div className="disclaimer-item">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5-15a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Files are available for <strong>4 days only</strong></span>
+          </div>
+          <div className="disclaimer-item">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A9.75 9.75 0 006.455 2.126A9.75 9.75 0 0012 2.25a9.75 9.75 0 015.545.126A5.5 5.5 0 0112 16.5a5.5 5.5 0 01-5.545-.876M15.75 12H12m8.25-8.25H4.5" />
+            </svg>
+            <span>Administrators reserve the right to delete files</span>
+          </div>
+        </div>
+
+        <div className="landing-form">
+          <label htmlFor="filebox-input">Filebox Name</label>
+          <input
+            id="filebox-input"
+            type="text"
+            placeholder="Enter your filebox name (alphanumeric only)"
+            value={fileboxName}
+            onChange={(e) => {
+              setFileboxName(e.target.value)
+              setError('')
+            }}
+            onKeyPress={handleKeyPress}
+            maxLength="255"
+            autoFocus
+          />
+          {error && <div className="error-message">{error}</div>}
+          <p className="input-hint">Use letters and numbers only (no spaces or special characters)</p>
+
+          <div className="button-group">
+            <button className="btn btn-secondary" onClick={handleAction}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="20" height="20">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.75l-2.475-2.475a6 6 0 00-8.485 0l-2.758 2.757a6 6 0 00-1.06 7.46m15.546-9.005a9 9 0 010 12.71M4.5 9h.008v.008H4.5V9zm0 2h.008v.008H4.5V11zm.375 5.35h.007v.007h-.007v-.007zm.375.35h.007v.007h-.007v-.007z" />
+              </svg>
+              View Files
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Upload Page Component
+function UploadPage({ fileboxName, onBack }) {
   const [status, setStatus] = useState('Idle')
   const [statusType, setStatusType] = useState('info')
   const [progress, setProgress] = useState(0)
@@ -59,7 +161,6 @@ export default function App(){
     let attempt = 0
     while (attempt <= MAX_RETRIES) {
       try {
-        // get presigned url
         const presign = await axios.post(`${API_BASE}/presign-part`, { uploadId: s.uploadId, key: s.key, partNumber })
         const url = presign.data.url
 
@@ -84,7 +185,6 @@ export default function App(){
           setUploading(false)
           return
         }
-        // backoff
         await new Promise(r => setTimeout(r, 500 * attempt))
       }
     }
@@ -93,13 +193,11 @@ export default function App(){
   const finalize = async () => {
     const s = uploadState.current
     try {
-      // sort parts
       s.completedParts.sort((a,b) => a.PartNumber - b.PartNumber)
       const response = await axios.post(`${API_BASE}/complete-multipart`, { key: s.key, uploadId: s.uploadId, parts: s.completedParts })
       setStatus('Upload completed successfully!')
       setStatusType('success')
       setUploading(false)
-      // Use downloadUrl from response if available, otherwise fall back to public URL
       setFileURL(response.data.downloadUrl || s.fileURL || '')
     } catch (err) {
       console.error('Error finalizing upload:', err)
@@ -130,7 +228,7 @@ export default function App(){
     setStatus('Initializing upload...')
     setStatusType('info')
     try {
-      const startRes = await axios.post(`${API_BASE}/initiate-multipart`, { key: file.name, size: file.size })
+      const startRes = await axios.post(`${API_BASE}/initiate-multipart`, { key: file.name, size: file.size, fileboxName })
       const { uploadId, key, url } = startRes.data
       uploadState.current = { ...uploadState.current, uploadId, key, file, fileSize: file.size, fileURL: url, totalChunks: Math.ceil(file.size / CHUNK_SIZE), completedParts: [], queue: [] , controllers: {} }
       const total = uploadState.current.totalChunks
@@ -171,8 +269,6 @@ export default function App(){
     handleFileSelect(file)
   }
 
-
-
   const handleRemoveFile = () => {
     setSelectedFile(null)
     setStatus('Idle')
@@ -197,15 +293,17 @@ export default function App(){
   }
 
   return (
-    <div className="app">
-      <div className="header">
-        <div className="header-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+    <div className="page upload-page">
+      <div className="page-header">
+        <button className="btn-back" onClick={onBack}>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="20" height="20">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
           </svg>
+        </button>
+        <div>
+          <h1>Upload Files</h1>
+          <p>Filebox: <strong>{fileboxName}</strong></p>
         </div>
-        <h1>Direct S3 Chunked Uploader</h1>
-        <p>Upload files up to {parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') / 1024}GB with chunked uploads</p>
       </div>
 
       <div className="card">
@@ -286,11 +384,6 @@ export default function App(){
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             )}
-            {statusType === 'warning' && (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-              </svg>
-            )}
             {statusType === 'error' && (
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
@@ -299,8 +392,6 @@ export default function App(){
             {status}
           </div>
         )}
-
-        <div className="controls"></div>
 
         {fileURL && (
           <div className="result">
@@ -322,5 +413,359 @@ export default function App(){
         )}
       </div>
     </div>
+  )
+}
+
+// List Files Page Component
+function ListFilesPage({ fileboxName, onBack }) {
+  const [uploads, setUploads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [uploadStatus, setUploadStatus] = useState('')
+  const [uploadStatusType, setUploadStatusType] = useState('info')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const uploadState = useRef({
+    uploadId: null,
+    key: null,
+    totalChunks: 0,
+    completedParts: [],
+    queue: [],
+    controllers: {},
+  })
+
+  React.useEffect(() => {
+    fetchUploads()
+  }, [fileboxName])
+
+  const startWorkers = () => {
+    for (let i=0;i<CONCURRENCY;i++) uploadNext()
+  }
+
+  const uploadNext = async () => {
+    const s = uploadState.current
+    const part = s.queue.shift()
+    if (!part) return
+    await uploadPart(part)
+    if (s.queue.length > 0) {
+      uploadNext()
+    }
+  }
+
+  const uploadPart = async (partNumber) => {
+    const s = uploadState.current
+    const start = (partNumber-1) * CHUNK_SIZE
+    const end = Math.min(start + CHUNK_SIZE, s.fileSize)
+    const chunk = s.file.slice(start, end)
+
+    let attempt = 0
+    while (attempt <= MAX_RETRIES) {
+      try {
+        const presign = await axios.post(`${API_BASE}/presign-part`, { uploadId: s.uploadId, key: s.key, partNumber })
+        const url = presign.data.url
+
+        const controller = new AbortController()
+        s.controllers[partNumber] = controller
+
+        const res = await fetch(url, { method: 'PUT', body: chunk, signal: controller.signal, headers: { 'Content-Type': s.file.type || 'application/octet-stream' } })
+        if (!res.ok) throw new Error('Upload failed status ' + res.status)
+        const etag = res.headers.get('etag') || ''
+        s.completedParts.push({ ETag: etag, PartNumber: partNumber })
+        delete s.controllers[partNumber]
+
+        const done = s.completedParts.length
+        setUploadProgress(Math.round((done / s.totalChunks) * 100))
+        if (done === s.totalChunks) await finalizeUpload()
+        return
+      } catch (err) {
+        attempt++
+        if (attempt > MAX_RETRIES) {
+          setUploadStatus('Failed uploading part ' + partNumber)
+          setUploadStatusType('error')
+          setIsUploading(false)
+          return
+        }
+        await new Promise(r => setTimeout(r, 500 * attempt))
+      }
+    }
+  }
+
+  const finalizeUpload = async () => {
+    const s = uploadState.current
+    try {
+      s.completedParts.sort((a,b) => a.PartNumber - b.PartNumber)
+      await axios.post(`${API_BASE}/complete-multipart`, { key: s.key, uploadId: s.uploadId, parts: s.completedParts })
+      setUploadStatus('Upload completed successfully!')
+      setUploadStatusType('success')
+      setIsUploading(false)
+      setUploadProgress(0)
+      // Refresh the file list
+      setTimeout(() => {
+        fetchUploads()
+        setUploadStatus('')
+      }, 1500)
+    } catch (err) {
+      console.error('Error finalizing upload:', err)
+      const errorMsg = err.response?.data || err.message || 'Unknown error finalizing upload'
+      setUploadStatus(`Failed to complete upload: ${errorMsg}`)
+      setUploadStatusType('error')
+      setIsUploading(false)
+    }
+  }
+
+  const handleFileSelect = (file) => {
+    if (!file) return
+    const maxFileSizeGB = parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') / 1024
+    if (file.size > MAX_BYTES) { 
+      setUploadStatus(`File too large (max ${maxFileSizeGB}GB)`) 
+      setUploadStatusType('error')
+      return 
+    }
+    initiateUpload(file)
+  }
+
+  const initiateUpload = async (file) => {
+    setUploadStatus('Initializing upload...')
+    setUploadStatusType('info')
+    try {
+      const startRes = await axios.post(`${API_BASE}/initiate-multipart`, { key: file.name, size: file.size, fileboxName })
+      const { uploadId, key, url } = startRes.data
+      uploadState.current = { ...uploadState.current, uploadId, key, file, fileSize: file.size, fileURL: url, totalChunks: Math.ceil(file.size / CHUNK_SIZE), completedParts: [], queue: [] , controllers: {} }
+      const total = uploadState.current.totalChunks
+      uploadState.current.queue = Array.from({length: total}, (_,i) => i+1)
+      setIsUploading(true)
+      setUploadStatus(`Uploading ${total} parts...`)
+      setUploadStatusType('info')
+      setUploadProgress(0)
+      startWorkers()
+    } catch (err) {
+      console.error('Error initiating upload:', err)
+      const errorMsg = err.response?.data || err.message || 'Failed to initiate upload'
+      setUploadStatus(errorMsg)
+      setUploadStatusType('error')
+    }
+  }
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0]
+    handleFileSelect(file)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    handleFileSelect(file)
+  }
+
+  const fetchUploads = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await axios.get(`${API_BASE}/list-uploads?filebox=${encodeURIComponent(fileboxName)}`)
+      setUploads(response.data.uploads || [])
+    } catch (err) {
+      console.error('Error fetching uploads:', err)
+      const errorMsg = err.response?.data || err.message || 'Failed to fetch uploads'
+      setError(errorMsg)
+      setUploads([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCopyLink = (url) => {
+    navigator.clipboard.writeText(url)
+  }
+
+  return (
+    <div className="page list-page">
+      <div className="page-header">
+        <button className="btn-back" onClick={onBack}>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="20" height="20">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <div>
+          <h1>Files in {fileboxName}</h1>
+          <p>View all uploaded files in your filebox</p>
+        </div>
+      </div>
+
+      <div className="card">
+        {/* Upload Form Section */}
+        <div className="upload-section">
+          <h3>Upload New File</h3>
+          <div 
+            className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById('file-input-list').click()}
+          >
+            <div className="upload-zone-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+            </div>
+            <h4>Drop your file here or click to browse</h4>
+            <p>Supports files up to {parseInt(import.meta.env.VITE_MAX_FILE_SIZE_MB || '1024') / 1024}GB</p>
+            <input 
+              type="file" 
+              id="file-input-list"
+              onChange={handleFile} 
+            />
+          </div>
+
+          {uploadProgress > 0 && (
+            <div className="progress-section visible">
+              <div className="progress-header">
+                <span className="progress-label">Upload Progress</span>
+                <span className="progress-percentage">{uploadProgress}%</span>
+              </div>
+              <div className="progress-track">
+                <div className={`progress-bar ${uploadProgress === 100 ? 'complete' : ''}`} style={{width: uploadProgress + '%'}}></div>
+              </div>
+              <div className="progress-stats">
+                <span>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="16" height="16">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                  </svg>
+                  {uploadState.current.completedParts?.length || 0} / {uploadState.current.totalChunks} parts
+                </span>
+                <span>Uploading...</span>
+              </div>
+            </div>
+          )}
+
+          {uploadStatus && (
+            <div className={`status status-${uploadStatusType}`}>
+              {uploadStatusType === 'info' && (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                </svg>
+              )}
+              {uploadStatusType === 'success' && (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {uploadStatusType === 'error' && (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+              )}
+              {uploadStatus}
+            </div>
+          )}
+        </div>
+
+        {/* File List Section */}
+        <div className="files-section">
+        {loading && (
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <p>Loading files...</p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="error-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <p>{error}</p>
+            <button className="btn btn-primary" onClick={fetchUploads}>Retry</button>
+          </div>
+        )}
+
+        {!loading && !error && uploads.length === 0 && (
+          <div className="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m0 0C5.25 5.089 8.25 4.5 12 4.5c3.75 0 6.75.589 6.75 1.875" />
+            </svg>
+            <p>No files uploaded yet</p>
+          </div>
+        )}
+
+        {!loading && !error && uploads.length > 0 && (
+          <div className="files-list">
+            <div className="files-header">
+              <span>Filename</span>
+              <span>Size</span>
+              <span>Uploaded</span>
+              <span>Action</span>
+            </div>
+            {uploads.map((upload, index) => (
+              <div key={index} className="file-row">
+                <div className="file-name-cell">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="20" height="20">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                  </svg>
+                  {upload.filename}
+                </div>
+                <div className="file-size-cell">{formatBytes(upload.sizeMb * 1024 * 1024)}</div>
+                <div className="file-date-cell">{formatDate(upload.createdAt)}</div>
+                <div className="file-actions-cell">
+                  <a href={upload.downloadUrl} target="_blank" rel="noreferrer" className="btn-small btn-download">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="16" height="16">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0115 0m-15 0a7.5 7.5 0 1115 0m-15 0H3m16.5 0H21m-1.5-6a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Download
+                  </a>
+                  <button className="btn-small btn-copy" onClick={() => handleCopyLink(upload.downloadUrl)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width="16" height="16">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+                    </svg>
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Main App Component
+export default function App() {
+  const [currentPage, setCurrentPage] = useState('landing')
+  const [currentFilebox, setCurrentFilebox] = useState('')
+
+  const handleBackToLanding = () => {
+    setCurrentPage('landing')
+    setCurrentFilebox('')
+  }
+
+  return (
+    <>
+      {currentPage === 'landing' && (
+        <LandingPage 
+          onList={(fileboxName) => {
+            setCurrentFilebox(fileboxName)
+            setCurrentPage('list')
+          }}
+        />
+      )}
+
+      {currentPage === 'list' && (
+        <ListFilesPage fileboxName={currentFilebox} onBack={handleBackToLanding} />
+      )}
+    </>
   )
 }

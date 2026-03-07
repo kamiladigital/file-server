@@ -74,12 +74,23 @@ func StartServer(cfg *config.Config) {
 			return
 		}
 		var req struct {
-			Key  string `json:"key"`  // original filename or path
-			Size int64  `json:"size"` // file size in bytes
+			Key         string `json:"key"`         // original filename or path
+			Size        int64  `json:"size"`        // file size in bytes
+			FileboxName string `json:"fileboxName"` // filebox identifier
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
 			log.Printf("[%s] Invalid request body: %v", reqID, err)
 			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		if req.FileboxName == "" {
+			log.Printf("[%s] Missing filebox name", reqID)
+			http.Error(w, "Filebox name is required", http.StatusBadRequest)
+			return
+		}
+		if !isValidFileboxName(req.FileboxName) {
+			log.Printf("[%s] Invalid filebox name format: %s", reqID, req.FileboxName)
+			http.Error(w, "Filebox name must be alphanumeric only", http.StatusBadRequest)
 			return
 		}
 		if req.Size <= 0 {
@@ -131,12 +142,13 @@ func StartServer(cfg *config.Config) {
 
 		// Store upload metadata in database
 		uploadMetadata := &database.UploadMetadata{
-			UploadID:   info.UploadID,
-			FileSizeMB: fileSizeMB,
-			UploaderIP: ip,
-			CreatedAt:  time.Now(),
-			S3Key:      targetKey,
-			Filename:   filename,
+			UploadID:    info.UploadID,
+			FileSizeMB:  fileSizeMB,
+			UploaderIP:  ip,
+			CreatedAt:   time.Now(),
+			S3Key:       targetKey,
+			Filename:    filename,
+			FileboxName: req.FileboxName,
 		}
 
 		if err := db.CreateUploadMetadata(ctx, uploadMetadata); err != nil {
@@ -289,11 +301,15 @@ func StartServer(cfg *config.Config) {
 		// Default values if metadata not found (shouldn't happen in normal flow)
 		sizeMB := float64(0)
 		uploaderIP := ""
+		var fileboxName string
 		if err != nil {
 			log.Printf("[%s] Warning: Unable to retrieve upload metadata: %v", reqID, err)
 		} else {
 			sizeMB = metadata.FileSizeMB
 			uploaderIP = metadata.UploaderIP
+			if metadata.FileboxName != "" {
+				fileboxName = metadata.FileboxName
+			}
 		}
 
 		// Clean up upload metadata from database
@@ -318,6 +334,9 @@ func StartServer(cfg *config.Config) {
 			DownloadURL: downloadURL,
 			CompletedAt: &completedTime,
 		}
+		if fileboxName != "" {
+			uploadRecord.FileboxName = fileboxName
+		}
 		if err := db.CreateUploadRecord(ctx, uploadRecord); err != nil {
 			log.Printf("[%s] Database error inserting upload: %v", reqID, err)
 			http.Error(w, fmt.Sprintf("Database error inserting upload completion: %v", err), http.StatusInternalServerError)
@@ -332,6 +351,55 @@ func StartServer(cfg *config.Config) {
 			"publicUrl":   publicURL,
 		}
 		json.NewEncoder(w).Encode(resp)
+	})
+
+	http.HandleFunc("/list-uploads", func(w http.ResponseWriter, r *http.Request) {
+		reqID := generateRequestID()
+		if middleware.ApplyCORS(w, r) {
+			return
+		}
+
+		// Get filebox name from query parameter
+		fileboxName := r.URL.Query().Get("filebox")
+		if fileboxName == "" {
+			log.Printf("[%s] Missing filebox parameter", reqID)
+			http.Error(w, "Filebox name is required", http.StatusBadRequest)
+			return
+		}
+
+		if !isValidFileboxName(fileboxName) {
+			log.Printf("[%s] Invalid filebox name format: %s", reqID, fileboxName)
+			http.Error(w, "Invalid filebox name format", http.StatusBadRequest)
+			return
+		}
+
+		// List uploads for this filebox
+		uploads, err := db.GetUploadsByFilebox(ctx, fileboxName, 100)
+		if err != nil {
+			log.Printf("[%s] Database error listing uploads for filebox %s: %v", reqID, fileboxName, err)
+			http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Convert to response format
+		var uploadsList []map[string]interface{}
+		for _, upload := range uploads {
+			uploadsList = append(uploadsList, map[string]interface{}{
+				"id":          upload.ID,
+				"uploadId":    upload.UploadID,
+				"filename":    upload.Filename,
+				"sizeMb":      upload.SizeMB,
+				"createdAt":   upload.CreatedAt,
+				"publicUrl":   upload.PublicURL,
+				"downloadUrl": upload.DownloadURL,
+			})
+		}
+
+		log.Printf("[%s] Listed %d uploads for filebox %s", reqID, len(uploadsList), fileboxName)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"filebox": fileboxName,
+			"uploads": uploadsList,
+		})
 	})
 
 	fmt.Println("Server running on :8080")
@@ -409,4 +477,17 @@ func cleanupExpiredData(db *database.Database) {
 			log.Printf("Cleaned up %d stale processed part(s)", deletedParts)
 		}
 	}
+}
+
+// isValidFileboxName validates that filebox name is alphanumeric only
+func isValidFileboxName(name string) bool {
+	if name == "" || len(name) > 255 {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return false
+		}
+	}
+	return true
 }
