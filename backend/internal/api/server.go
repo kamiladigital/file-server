@@ -301,13 +301,15 @@ func StartServer(cfg *config.Config) {
 		// Default values if metadata not found (shouldn't happen in normal flow)
 		sizeMB := float64(0)
 		uploaderIP := ""
-		fileboxName := ""
+		var fileboxName string
 		if err != nil {
 			log.Printf("[%s] Warning: Unable to retrieve upload metadata: %v", reqID, err)
 		} else {
 			sizeMB = metadata.FileSizeMB
 			uploaderIP = metadata.UploaderIP
-			fileboxName = metadata.FileboxName
+			if metadata.FileboxName != "" {
+				fileboxName = metadata.FileboxName
+			}
 		}
 
 		// Clean up upload metadata from database
@@ -331,7 +333,9 @@ func StartServer(cfg *config.Config) {
 			PublicURL:   publicURL,
 			DownloadURL: downloadURL,
 			CompletedAt: &completedTime,
-			FileboxName: fileboxName,
+		}
+		if fileboxName != "" {
+			uploadRecord.FileboxName = fileboxName
 		}
 		if err := db.CreateUploadRecord(ctx, uploadRecord); err != nil {
 			log.Printf("[%s] Database error inserting upload: %v", reqID, err)
