@@ -562,6 +562,38 @@ body {
   font-size: 16px;
 }
 
+.landing-disclaimer {
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.disclaimer-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.disclaimer-item svg {
+  width: 20px;
+  height: 20px;
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.disclaimer-item strong {
+  color: var(--primary-hover);
+}
+
 .landing-form {
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
@@ -621,6 +653,29 @@ body {
 
 /* List Files Page */
 .list-page .card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-section {
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.upload-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+
+.upload-section .upload-zone {
+  padding: 32px 24px;
+}
+
+.files-section {
   flex: 1;
 }
 
